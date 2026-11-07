@@ -12,6 +12,9 @@ Buka `index.html` di browser. Data tersimpan di localStorage browser.
 - Energi per karakter: Basic +20, Skill +30 (dikali 1 + ERR dari target build), Ultimate memakai seluruh
   Energi lalu mengembalikan 5. Perubahan energi tiap langkah bisa ditimpa manual.
 - Ekspor/impor JSON dan salin rotasi sebagai teks.
+- Gambar karakter, Light Cone, element, dan path, plus pemilih karakter bergambar.
+- Animasi: transisi antar tab, kartu baru berkedip, bar energi dan pip SP bergerak, latar bintang.
+  Animasi dimatikan otomatis bila sistem memakai pengaturan "kurangi gerakan".
 
 ## Memperbarui data game
 `data.js` dibuat otomatis dari https://github.com/Mar-7th/StarRailRes (data versi 4.6).
@@ -20,6 +23,11 @@ Setelah ada patch baru:
     node tools/update-data.js
 
 Butuh Node 18+ dan koneksi internet.
+
+## Gambar
+Gambar tidak disimpan di repo. Aplikasi memuatnya dari CDN jsDelivr (cadangan: raw GitHub) milik
+[Mar-7th/StarRailRes](https://github.com/Mar-7th/StarRailRes). Bila gambar gagal dimuat, tampil huruf awal.
+Proyek ini buatan penggemar dan tidak berafiliasi dengan HoYoverse. Aset game © HoYoverse.
 
 ## Batasan
 - Buff SPD belum disimulasikan, dan Delay pada musuh tidak dilacak (hanya Advance/Delay pada sekutu).

@@ -7,6 +7,9 @@ const fs = require('fs');
 const path = require('path');
 
 const BASE = 'https://raw.githubusercontent.com/Mar-7th/StarRailRes/master/index_min/en/';
+// Gambar tidak disalin ke repo. Aplikasi memuatnya dari CDN (cadangan: raw GitHub) saat dibuka.
+const ASSET_BASE = 'https://cdn.jsdelivr.net/gh/Mar-7th/StarRailRes@master/';
+const ASSET_FALLBACK = 'https://raw.githubusercontent.com/Mar-7th/StarRailRes/master/';
 const ELEMENT_FIX = { Thunder: 'Lightning' }; // nama internal -> nama di game
 
 async function get(name) {
@@ -35,7 +38,7 @@ const elementName = id => ELEMENT_FIX[id] || id;
   // Karakter. Trailblazer bernama placeholder {NICKNAME} (versi pria/wanita); satukan per path.
   let list = Object.values(chars).map(c => ({
     n: c.name.includes('{') ? 'Trailblazer' : c.name,
-    p: pathName(c.path), e: elementName(c.element), r: c.rarity, u: ultCost(c.max_sp), id: Number(c.id),
+    p: pathName(c.path), e: elementName(c.element), r: c.rarity, u: ultCost(c.max_sp), i: `icon/avatar/${c.id}.png`, id: Number(c.id),
   }));
   const count = {};
   list.forEach(c => { count[c.n] = (count[c.n] || 0) + 1; });
@@ -49,14 +52,22 @@ const elementName = id => ELEMENT_FIX[id] || id;
   relicSets.sort(); planarSets.sort();
 
   const lightCones = Object.values(cones)
-    .map(l => ({ n: l.name, p: pathName(l.path), r: l.rarity }))
+    .map(l => ({ n: l.name, p: pathName(l.path), r: l.rarity, i: l.icon }))
     .sort((a, b) => b.r - a.r || a.n.localeCompare(b.n));
+
+  const elementIcons = {}, pathIcons = {};
+  for (const e of Object.values(elements)) elementIcons[e.name] = e.icon;
+  for (const p of Object.values(paths)) pathIcons[p.name] = p.icon_small || p.icon;
 
   const row = o => '    ' + JSON.stringify(o);
   const out = `// File ini dibuat otomatis oleh tools/update-data.js. Jangan diedit manual.
 // Sumber: https://github.com/Mar-7th/StarRailRes
 const GAME_DATA = {
   generated: ${JSON.stringify(new Date().toISOString().slice(0, 10))},
+  assetBase: ${JSON.stringify(ASSET_BASE)},
+  assetFallback: ${JSON.stringify(ASSET_FALLBACK)},
+  elementIcons: ${JSON.stringify(elementIcons)},
+  pathIcons: ${JSON.stringify(pathIcons)},
   characters: [
 ${list.map(({ id, ...c }) => row(c)).join(',\n')}
   ],
