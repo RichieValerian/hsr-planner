@@ -16,6 +16,23 @@ const PLANAR_SETS = GAME_DATA.planarSets;
 const LIGHT_CONES = GAME_DATA.lightCones;
 const slug = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
+// Gambar dimuat dari CDN saat aplikasi dibuka (tidak disimpan di repo). Bila gagal dimuat, tampil huruf awal.
+const CHAR_ART = new Map(GAME_DATA.characters.map(c => [c.n.toLowerCase(), c]));
+const LC_ART = new Map(LIGHT_CONES.map(l => [l.n.toLowerCase(), l]));
+const assetImg = (rel, cls = '') =>
+  `<img${cls ? ` class="${cls}"` : ''} src="${GAME_DATA.assetBase}${rel}" data-rel="${rel}" alt="" loading="lazy" decoding="async">`;
+const initialOf = name => esc(String(name ?? '').trim().charAt(0).toUpperCase() || '?');
+function charArt(name, size = '') {
+  const c = CHAR_ART.get(String(name ?? '').trim().toLowerCase());
+  return `<span class="art ${size}${c ? ' r' + c.r : ''}" data-initial="${initialOf(name)}">${c ? assetImg(c.i) : ''}</span>`;
+}
+function lcArt(name, size = '') {
+  const l = LC_ART.get(String(name ?? '').trim().toLowerCase());
+  return `<span class="art sq ${size}${l ? ' r' + l.r : ''}" data-initial="${initialOf(name)}">${l ? assetImg(l.i) : ''}</span>`;
+}
+const elemIcon = el => (GAME_DATA.elementIcons[el] ? assetImg(GAME_DATA.elementIcons[el], 'ico') : '');
+const pathIcon = p => (GAME_DATA.pathIcons[p] ? assetImg(GAME_DATA.pathIcons[p], 'ico') : '');
+
 // Waktu (Action Value): 150 AV pertama = Cycle 0, lalu 100 AV per Cycle.
 const FIRST_CYCLE_AV = 150;
 const CYCLE_AV = 100;
@@ -190,10 +207,10 @@ function stepMeta(team) {
 }
 
 const pips = n => '<span class="pip on"></span>'.repeat(n) + '<span class="pip"></span>'.repeat(MAX_SP - n);
-function spCell(r) {
+function spCell(r, anim = false) {
   const flag = r.issue === 'bad' ? '<span class="flag bad">SP kurang</span>'
     : r.issue === 'over' ? '<span class="flag over">SP terbuang</span>' : '';
-  return `${r.before} ke ${r.after} <span class="pips">${pips(r.after)}</span>${flag}`;
+  return `${r.before} ke ${r.after} <span class="pips${anim ? ' anim' : ''}">${pips(r.after)}</span>${flag}`;
 }
 
 /* ---------- Energy & Action Advance ---------- */
@@ -267,16 +284,18 @@ function computeTiming(team) {
   });
 }
 
-function enCell(e) {
+function enCell(e, anim = false) {
   if (!e) return '';
   if (!e.cost) return '<span class="muted">-</span>';
   const flag = e.issue ? '<span class="flag bad">Energi kurang</span>' : '';
-  return `<span title="sebelum ${fmt(e.before)}, perubahan ${fmt(e.after - e.before)}">${fmt(e.after)}/${e.cost}</span>${flag}`;
+  const pct = Math.round(e.after / e.cost * 100);
+  return `<span title="sebelum ${fmt(e.before)}, perubahan ${fmt(e.after - e.before)}">${fmt(e.after)}/${e.cost}</span>${flag}
+    <div class="bar${anim ? ' anim' : ''}${pct >= 100 ? ' full' : ''}"><i style="--w:${pct}%"></i></div>`;
 }
 function avCell(t) {
   if (!t || t.av === null) return '<span class="muted">-</span>';
   const flag = t.issue ? `<span class="flag over" title="${esc(t.issue)}">urutan?</span>` : '';
-  return `${t.approx ? '~' : ''}${fmt(t.av)} <small class="muted">C${t.cycle}</small>${flag}`;
+  return `${t.approx ? '~' : ''}${t.av.toFixed(1)} <small class="muted">C${t.cycle}</small>${flag}`;
 }
 const rowClass = (sp, en, tm) =>
   sp.issue === 'bad' || en?.issue ? 'bad' : [sp.issue, tm?.issue ? 'warn' : ''].filter(Boolean).join(' ');
@@ -291,11 +310,11 @@ function buildEditor(c, b) {
   return `
     <div class="editor">
       <div class="sect">Umum</div>
-      <div class="grid two">
+      <div class="lc-row"><span class="lcw" data-size="lg">${lcArt(b.lightCone, 'lg')}</span><div class="grid two">
         ${inp('Nama build', 'label', b.label)}
         ${inp('Light Cone', 'lightCone', b.lightCone, PATHS.includes(c.path) ? 'dl-lc-' + slug(c.path) : 'dl-lc-all')}
         ${sel('Superimposition', 'superimposition', b.superimposition, ['S1', 'S2', 'S3', 'S4', 'S5'])}
-      </div>
+      </div></div>
       <div class="sect">Relic &amp; Ornamen</div>
       <div class="grid two">
         ${inp('Set relic (mis. 4pc atau 2pc+2pc)', 'relicSet', b.relicSet, 'dl-relic')}
@@ -328,17 +347,20 @@ function buildSubtitle(b) {
 
 function charCard(c) {
   const builds = c.builds.map(b => `
-    <details data-key="${b.id}"${ui.open.has(b.id) ? ' open' : ''}>
-      <summary><span class="t">${esc(b.label)}</span><span class="sub">${esc(buildSubtitle(b))}</span></summary>
+    <details class="${ui.flash === b.id ? 'flash' : ''}" data-key="${b.id}"${ui.open.has(b.id) ? ' open' : ''}>
+      <summary><span class="sum-l"><span class="lcw" data-size="xs">${lcArt(b.lightCone, 'xs')}</span><span class="t">${esc(b.label)}</span></span><span class="sub">${esc(buildSubtitle(b))}</span></summary>
       ${buildEditor(c, b)}
     </details>`).join('') || '<div class="empty">Belum ada build.</div>';
   return `
-    <article class="card">
+    <article class="card${ui.flash === c.id ? ' flash' : ''}">
       <header>
-        <div>
-          <h3>${esc(c.name)}</h3>
-          ${c.element ? `<span class="tag el-${esc(c.element.toLowerCase())}">${esc(c.element)}</span>` : ''}
-          ${c.path ? `<span class="tag">${esc(c.path)}</span>` : ''}
+        <div class="who">
+          ${charArt(c.name, 'lg')}
+          <div>
+            <h3>${esc(c.name)}</h3>
+            ${c.element ? `<span class="tag el-${esc(c.element.toLowerCase())}">${elemIcon(c.element)}${esc(c.element)}</span>` : ''}
+            ${c.path ? `<span class="tag">${pathIcon(c.path)}${esc(c.path)}</span>` : ''}
+          </div>
         </div>
         <div class="actions">
           <label class="inline-lbl" title="Energi yang dibutuhkan untuk Ultimate. Isi 0 bila tidak memakai Energy biasa.">Energi Ult
@@ -375,6 +397,22 @@ function charsView() {
         <label>Element<select id="new-element">${opts(ELEMENTS, '', '— pilih —')}</select></label>
         <button class="primary" data-act="add-char">Tambah</button>
       </div>
+      <details class="picker-wrap" data-key="picker"${ui.open.has('picker') ? ' open' : ''}>
+        <summary>Pilih dari daftar karakter (dengan gambar)</summary>
+        <div class="row picker-filters">
+          <label>Cari<input id="pick-q" placeholder="Nama karakter" autocomplete="off"></label>
+          <label>Path<select id="pick-path">${opts(PATHS, '', 'Semua')}</select></label>
+          <label>Element<select id="pick-el">${opts(ELEMENTS, '', 'Semua')}</select></label>
+        </div>
+        <div class="picker" id="picker">
+          ${GAME_DATA.characters.map(c => {
+            const v = c.n.match(/^(.*) \((.+)\)$/); // varian, mis. "March 7th (Preservation)"
+            return `<button type="button" class="pick" data-act="pick" data-name="${esc(c.n)}" data-path="${esc(c.p)}" data-el="${esc(c.e)}"
+            title="${esc(`${c.n} · ${c.r}★ ${c.e} · ${c.p}`)}">${charArt(c.n, 'md')}<span>${esc(v ? v[1] : c.n)}${v ? `<small>${esc(v[2])}</small>` : ''}</span></button>`;
+          }).join('')}
+          <div class="empty" id="pick-none" hidden>Tidak ada karakter yang cocok.</div>
+        </div>
+      </details>
     </section>
     ${list}`;
 }
@@ -394,12 +432,15 @@ function memberCard(team, i) {
     </div>` : '';
   return `
     <div class="member">
-      <label>Slot ${i + 1}
-        <select data-bind="member" data-idx="${i}" data-field="charId">
-          ${state.characters.map(ch => `<option value="${ch.id}"${ch.id === m.charId ? ' selected' : ''}>${esc(ch.name)}</option>`).join('')
-            .replace(/^/, '<option value="">— kosong —</option>')}
-        </select>
-      </label>
+      <div class="mhead">
+        ${charArt(c?.name ?? '', 'lg')}
+        <label class="grow">Slot ${i + 1}
+          <select data-bind="member" data-idx="${i}" data-field="charId">
+            ${state.characters.map(ch => `<option value="${ch.id}"${ch.id === m.charId ? ' selected' : ''}>${esc(ch.name)}</option>`).join('')
+              .replace(/^/, '<option value="">— kosong —</option>')}
+          </select>
+        </label>
+      </div>
       ${c ? `<label>Build
         <select data-bind="member" data-idx="${i}" data-field="buildId">
           <option value="">— tanpa build —</option>
@@ -421,7 +462,7 @@ function stepRow(team, step, meta, calc) {
       </div>`;
   if (step.action === CYCLE) {
     return `
-    <tr class="cycle" data-row="${step.id}">
+    <tr class="cycle${ui.flash === step.id ? ' flash' : ''}" data-row="${step.id}">
       <td colspan="10">Cycle ${meta.cycle} <span class="muted">(mulai AV ${FIRST_CYCLE_AV + CYCLE_AV * (meta.cycle - 1)})</span></td>
       <td>${buttons}</td>
     </tr>`;
@@ -438,9 +479,9 @@ function stepRow(team, step, meta, calc) {
   const a = `data-bind="step" data-sid="${step.id}"`;
   const en = calc.en;
   return `
-    <tr class="${rowClass(calc.sp, en, calc.tm)}" data-row="${step.id}">
+    <tr class="${[rowClass(calc.sp, en, calc.tm), ui.flash === step.id ? 'flash' : ''].filter(Boolean).join(' ')}" data-row="${step.id}">
       <td class="num">${meta.num}</td>
-      <td><select ${a} data-field="actor">${actorOpts}</select></td>
+      <td><div class="actor-cell">${charArt(charById(step.actor)?.name ?? '', 'sm')}<select ${a} data-field="actor">${actorOpts}</select></div></td>
       <td><select ${a} data-field="action">${Object.entries(ACTIONS).map(([k, v]) =>
         `<option value="${k}"${k === step.action ? ' selected' : ''}>${v.label}</option>`).join('')}</select></td>
       <td class="delta"><input type="number" step="1" ${a} data-field="delta" value="${step.delta}"></td>
@@ -465,7 +506,7 @@ function simView(team) {
   const named = members.filter(x => x.spd);
   const turns = simulateTurns(team, ui.simCycles);
   const speedRows = members.map(x => `
-      <tr><td>${esc(x.c.name)}</td>
+      <tr><td><span class="nm">${charArt(x.c.name, 'sm')}${esc(x.c.name)}</span></td>
         <td>${x.spd ? x.spd : '<span class="muted">isi SPD</span>'}</td>
         <td>${x.spd ? baseAV(x.spd).toFixed(1) : '-'}</td>
         <td>${x.spd ? (x.spd / 100).toFixed(2) : '-'}</td></tr>`).join('');
@@ -475,7 +516,7 @@ function simView(team) {
     const list = byCycle[k] || [];
     const range = k === 0 ? `0–${FIRST_CYCLE_AV} AV` : `${FIRST_CYCLE_AV + CYCLE_AV * (k - 1)}–${FIRST_CYCLE_AV + CYCLE_AV * k} AV`;
     return `<tr><td class="nowrap"><strong>Cycle ${k}</strong><div class="muted">${range}</div></td>
-      <td>${list.map(t => `<span class="chip" title="SPD ${t.spd}">${esc(charById(t.charId)?.name || '?')} <small>${t.av.toFixed(1)}</small></span>`).join(' ') || '<span class="muted">-</span>'}</td></tr>`;
+      <td>${list.map((t, n) => `<span class="chip" style="--i:${Math.min(n, 12)}" title="SPD ${t.spd}">${charArt(charById(t.charId)?.name, 'xs')}${esc(charById(t.charId)?.name || '?')} <small>${t.av.toFixed(1)}</small></span>`).join(' ') || '<span class="muted">-</span>'}</td></tr>`;
   }).join('');
   return `
     <table>
@@ -579,10 +620,21 @@ function dataView() {
 }
 
 /* ---------- Render utama ---------- */
-function render() {
+// enter = true memutar animasi masuk (ganti tab / pertama dibuka). ui.flash menandai satu elemen baru agar berkedip.
+function render(enter = false) {
   document.querySelectorAll('.top nav button').forEach(b => b.classList.toggle('active', b.dataset.tab === ui.tab));
   const view = { chars: charsView, rotation: rotationView, data: dataView }[ui.tab];
-  document.getElementById('app').innerHTML = view();
+  const app = document.getElementById('app');
+  app.className = enter ? 'enter' : '';
+  app.innerHTML = view();
+  ui.flash = null;
+}
+
+// Samakan serialisasi HTML (dan abaikan kelas "anim") agar perbandingan antar render akurat.
+function normHTML(h) {
+  const t = document.createElement('template');
+  t.innerHTML = h;
+  return t.innerHTML.replace(/ anim(?=[" ])/g, '').trim();
 }
 
 // Hitung ulang SP, Energi, dan AV lalu perbarui sel tabel di tempat (tanpa render ulang).
@@ -594,18 +646,24 @@ function refreshCalc() {
     if (step.action === CYCLE) return;
     const tr = document.querySelector(`[data-row="${step.id}"]`);
     if (!tr) return;
-    tr.querySelector('[data-sp]').innerHTML = spCell(sp[i]);
-    tr.querySelector('[data-en]').innerHTML = enCell(en[i]);
+    // Hanya sel yang isinya berubah yang ditulis ulang, supaya animasi (pip, bar energi) hanya memutar di sel itu.
+    const put = (sel, html) => {
+      const n = tr.querySelector(sel);
+      if (normHTML(n.innerHTML) !== normHTML(html)) n.innerHTML = html;
+    };
+    put('[data-sp]', spCell(sp[i], true));
+    put('[data-en]', enCell(en[i], true));
+    put('[data-av]', avCell(tm[i]));
     tr.querySelector('[data-enin]').placeholder = en[i]?.cost ? fmt(en[i].auto) : '-';
-    tr.querySelector('[data-av]').innerHTML = avCell(tm[i]);
-    tr.className = rowClass(sp[i], en[i], tm[i]);
+    tr.classList.remove('bad', 'over', 'warn');
+    rowClass(sp[i], en[i], tm[i]).split(' ').filter(Boolean).forEach(k => tr.classList.add(k));
   });
 }
 
 function refreshSim() {
   const team = currentTeam();
   const box = document.getElementById('sim');
-  if (team && box) box.innerHTML = simView(team);
+  if (team && box) { box.innerHTML = simView(team); box.classList.add('anim'); }
 }
 
 /* ---------- Aksi ---------- */
@@ -624,7 +682,7 @@ function rotationText(team) {
     if (s.action === CYCLE) return `-- Cycle ${meta[i].cycle} --`;
     const name = charById(s.actor)?.name || '?';
     const parts = [`SP ${sp[i].before}→${sp[i].after}`];
-    if (tm[i]?.av != null) parts.push(`AV ${tm[i].approx ? '~' : ''}${fmt(tm[i].av)}`);
+    if (tm[i]?.av != null) parts.push(`AV ${tm[i].approx ? '~' : ''}${tm[i].av.toFixed(1)}`);
     if (en[i]?.cost) parts.push(`Energi ${fmt(en[i].after)}/${en[i].cost}`);
     let extra = '';
     if (Number(s.adv)) {
@@ -684,7 +742,16 @@ function sampleData() {
 }
 
 const actions = {
-  tab(el) { ui.tab = el.dataset.tab; render(); },
+  tab(el) { ui.tab = el.dataset.tab; render(true); },
+
+  pick(el) {
+    document.getElementById('new-name').value = el.dataset.name;
+    document.getElementById('new-path').value = el.dataset.path;
+    document.getElementById('new-element').value = el.dataset.el;
+    document.querySelectorAll('#picker .pick.sel').forEach(b => b.classList.remove('sel'));
+    el.classList.add('sel');
+    toast(`${el.dataset.name} dipilih. Klik Tambah`);
+  },
 
   'add-char'() {
     const name = document.getElementById('new-name').value.trim();
@@ -698,6 +765,7 @@ const actions = {
       builds: [newBuild('Build 1')],
     };
     state.characters.push(c);
+    ui.flash = c.id;
     ui.open.add(c.builds[0].id);
     save(); render();
   },
@@ -714,7 +782,7 @@ const actions = {
   'add-build'(el) {
     const c = charById(el.dataset.cid);
     const b = newBuild(`Build ${c.builds.length + 1}`);
-    c.builds.push(b); ui.open.add(b.id);
+    c.builds.push(b); ui.open.add(b.id); ui.flash = b.id;
     save(); render();
   },
   'dup-build'(el) {
@@ -722,7 +790,7 @@ const actions = {
     const src = buildOf(c, el.dataset.bid);
     const copy = normBuild({ ...src, id: uid(), label: src.label + ' (salinan)' });
     copy.id = uid();
-    c.builds.push(copy); ui.open.add(copy.id);
+    c.builds.push(copy); ui.open.add(copy.id); ui.flash = copy.id;
     save(); render();
   },
   'del-build'(el) {
@@ -753,12 +821,17 @@ const actions = {
   'add-step'(el) {
     const t = currentTeam();
     const action = el.dataset.action;
-    t.rotation.push(newStep(el.dataset.actor, action));
+    const st = newStep(el.dataset.actor, action);
+    t.rotation.push(st);
+    ui.flash = st.id;
     save(); render();
+    toast(`${charById(st.actor)?.name || '?'}: ${ACTIONS[action].label} ditambahkan (langkah ${t.rotation.filter(x => x.action !== CYCLE).length})`);
   },
   'add-cycle'() {
     const t = currentTeam();
-    t.rotation.push(newStep('', CYCLE));
+    const st = newStep('', CYCLE);
+    t.rotation.push(st);
+    ui.flash = st.id;
     save(); render();
   },
   'fill-turns'() {
@@ -784,8 +857,8 @@ const actions = {
     t.rotation = t.rotation.filter(s => s.id !== el.dataset.sid);
     save(); render();
   },
-  up(el) { moveStep(currentTeam(), el.dataset.sid, -1); save(); render(); },
-  down(el) { moveStep(currentTeam(), el.dataset.sid, 1); save(); render(); },
+  up(el) { moveStep(currentTeam(), el.dataset.sid, -1); ui.flash = el.dataset.sid; save(); render(); },
+  down(el) { moveStep(currentTeam(), el.dataset.sid, 1); ui.flash = el.dataset.sid; save(); render(); },
   'clear-steps'() {
     const t = currentTeam();
     if (!t.rotation.length || !confirm('Kosongkan semua langkah rotasi?')) return;
@@ -834,6 +907,7 @@ function onEdit(e, committed) {
     if (det) {
       det.querySelector('.t').textContent = b.label;
       det.querySelector('.sub').textContent = buildSubtitle(b);
+      if (d.field === 'lightCone') det.querySelectorAll('.lcw').forEach(n => { n.innerHTML = lcArt(b.lightCone, n.dataset.size); });
     }
     save();
     return;
@@ -911,6 +985,8 @@ function onEdit(e, committed) {
     } else if (d.field === 'actor') {
       if (!committed) return;
       step.actor = el.value;
+      const artBox = el.parentElement.querySelector('.art');
+      if (artBox) artBox.outerHTML = charArt(charById(el.value)?.name ?? '', 'sm');
       refreshCalc();
     } else if (d.field === 'adv') {
       const n = Number(el.value);
@@ -942,6 +1018,45 @@ document.addEventListener('toggle', e => {
   e.target.open ? ui.open.add(key) : ui.open.delete(key);
 }, true);
 
+// Animasi buka editor hanya saat pengguna mengklik (bukan tiap render ulang).
+document.addEventListener('click', e => {
+  const summary = e.target.closest('summary');
+  const det = summary?.parentElement;
+  if (!det || det.tagName !== 'DETAILS' || det.open) return;
+  det.classList.add('opening');
+  setTimeout(() => det.classList.remove('opening'), 450);
+});
+
+// Gambar gagal dimuat: coba sumber cadangan sekali, lalu sembunyikan agar huruf awal terlihat.
+document.addEventListener('error', e => {
+  const img = e.target;
+  if (img.tagName !== 'IMG') return;
+  if (!img.dataset.retried && img.dataset.rel) {
+    img.dataset.retried = '1';
+    img.src = GAME_DATA.assetFallback + img.dataset.rel;
+  } else {
+    img.classList.add('broken');
+  }
+}, true);
+
+function filterPicker() {
+  const q = (document.getElementById('pick-q')?.value || '').trim().toLowerCase();
+  const path = document.getElementById('pick-path')?.value || '';
+  const element = document.getElementById('pick-el')?.value || '';
+  let shown = 0;
+  document.querySelectorAll('#picker .pick').forEach(b => {
+    const show = (!q || b.dataset.name.toLowerCase().includes(q)) &&
+      (!path || b.dataset.path === path) && (!element || b.dataset.el === element);
+    b.hidden = !show;
+    if (show) shown++;
+  });
+  const none = document.getElementById('pick-none');
+  if (none) none.hidden = shown > 0;
+}
+for (const type of ['input', 'change']) {
+  document.addEventListener(type, e => { if (/^pick-(q|path|el)$/.test(e.target.id)) filterPicker(); });
+}
+
 function importFile(input) {
   const file = input.files[0];
   if (!file) return;
@@ -969,4 +1084,4 @@ document.addEventListener('input', e => {
 });
 
 if (!state.characters.length && !state.teams.length) ui.tab = 'chars';
-render();
+render(true);
